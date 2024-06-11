@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-import joblib
+import tensorflow as tf
 import pandas as pd
 import os
 
@@ -50,12 +50,12 @@ async def training(training_data: TrainingData):
         logger.info(f"Target d'entraînement:\n{target.head()}")
         
         model = train_model(df, target)
-        model_path = "model/model.joblib"
+        model_path = "model/model.h5"
         
         if not os.path.exists("model"):
             os.makedirs("model")
         
-        joblib.dump(model, model_path)
+        model.save(model_path)
         logger.info(f"Modèle sauvegardé à {model_path}")
         return {"message": "Modèle entraîné et sauvegardé avec succès"}
     except Exception as e:
@@ -65,12 +65,14 @@ async def training(training_data: TrainingData):
 @app.post("/predict", tags=["Prediction"], summary="Fait une prédiction avec le modèle entraîné")
 async def predict(prediction_data: PredictionData):
     try:
-        model_path = "model/model.joblib"
+        model_path = "model/model.h5"
         if not os.path.exists(model_path):
             raise HTTPException(status_code=404, detail="Modèle non trouvé. Entraînez le modèle avant de faire des prédictions.")
         
-        model = joblib.load(model_path)
+        logger.info(f"Chargement du modèle depuis {model_path}")
+        model = tf.keras.models.load_model(model_path)
         df = pd.DataFrame(prediction_data.data)
+        logger.info(f"Données pour la prédiction:\n{df.head()}")
         predictions = make_prediction(model, df)
         return {"predictions": predictions.tolist()}
     except Exception as e:
