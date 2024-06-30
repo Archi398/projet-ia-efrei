@@ -1,95 +1,82 @@
-import logging
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+from fastapi import FastAPI, UploadFile, File, HTTPException
 import tensorflow as tf
-import pandas as pd
+import numpy as np
+from io import BytesIO
+from PIL import Image
 import os
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-from functions import train_model, make_prediction
+from sklearn.model_selection import train_test_split
 
 app = FastAPI(
-    title="Machine Learning API",
-    description="Cette API permet d'entraîner un modèle de machine learning et de faire des prédictions.",
+    title="Image Classification API",
+    description="API for training and predicting image classification models",
     version="1.0.0"
 )
 
-# CORS middleware
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:8000",
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def load_images_from_folder(folder):
+    images = []
+    labels = []
+    for filename in os.listdir(folder):
+        label = 'chien' if 'chien' in filename else 'chat'
+        img_path = os.path.join(folder, filename)
+        image = Image.open(img_path)
+        images.append(np.array(image.resize((128, 128))))
+        labels.append(label)
+    return np.array(images), np.array(labels)
 
-class TrainingData(BaseModel):
-    data: List[List[float]]
-    target: List[float]
-
-class PredictionData(BaseModel):
-    data: List[List[float]]
-
-@app.post("/training", tags=["Model Training"], summary="Entraîne un modèle sur les données fournies")
-async def training(training_data: TrainingData):
+@app.post("/training")
+async def train_model():
     try:
-        logger.info("Début de l'entraînement du modèle")
-        df = pd.DataFrame(training_data.data)
-        target = pd.Series(training_data.target)
-        logger.info(f"DataFrame d'entraînement:\n{df.head()}")
-        logger.info(f"Target d'entraînement:\n{target.head()}")
+        images, labels = load_images_from_folder('img')
         
-        model = train_model(df, target)
-        model_path = "model/model.h5"
+        label_to_index = {'chien': 0, 'chat': 1}
+        labels = np.array([label_to_index[label] for label in labels])
         
-        if not os.path.exists("model"):
-            os.makedirs("model")
+        X_train, X_test, y_train, y_test = train_test_split(images, labels, test_size=0.2, random_state=42)
         
-        model.save(model_path)
-        logger.info(f"Modèle sauvegardé à {model_path}")
-        return {"message": "Modèle entraîné et sauvegardé avec succès"}
+        model = tf.keras.Sequential([
+            tf.keras.layers.Flatten(input_shape=(128, 128, 3)),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dense(2, activation='softmax')
+        ])
+        
+        model.compile(optimizer='adam',
+                      loss='sparse_categorical_crossentropy',
+                      metrics=['accuracy'])
+        
+        model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test))
+        model.save('model/model.h5')
+        return {"message": "Model trained successfully"}
     except Exception as e:
-        logger.error(f"Erreur lors de l'entraînement du modèle: {e}")
-        raise HTTPException(status_code=500, detail=f"Erreur lors de l'entraînement du modèle: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/predict", tags=["Prediction"], summary="Fait une prédiction avec le modèle entraîné")
-async def predict(prediction_data: PredictionData):
+@app.post("/predict")
+async def predict(file: UploadFile = File(...)):
     try:
-        model_path = "model/model.h5"
-        if not os.path.exists(model_path):
-            raise HTTPException(status_code=404, detail="Modèle non trouvé. Entraînez le modèle avant de faire des prédictions.")
+        image = Image.open(BytesIO(file.file.read()))
+        image = np.array(image.resize((128, 128)))[np.newaxis, ...]
         
-        logger.info(f"Chargement du modèle depuis {model_path}")
-        model = tf.keras.models.load_model(model_path)
-        df = pd.DataFrame(prediction_data.data)
-        logger.info(f"Données pour la prédiction:\n{df.head()}")
-        predictions = make_prediction(model, df)
-        return {"predictions": predictions.tolist()}
+        model = tf.keras.models.load_model('model/model.h5')
+        prediction = model.predict(image)
+        predicted_class = np.argmax(prediction, axis=1)[0]
+        
+        index_to_label = {0: 'chien', 1: 'chat'}
+        predicted_label = index_to_label[predicted_class]
+        
+        return {"prediction": predicted_label}
     except Exception as e:
-        logger.error(f"Erreur lors de la prédiction: {e}")
-        raise HTTPException(status_code=400, detail=f"Erreur lors de la prédiction: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/model", tags=["External API Call"], summary="Appel à une API externe (OpenAI ou HuggingFace)")
-async def get_model():
-    return {"message": "Cet endpoint fera un appel à une API externe"}
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"message": exc.detail},
-    )
+@app.get("/model")
+async def get_model_info():
+    try:
+        # Example: fetching models from HuggingFace
+        response = requests.get("https://huggingface.co/api/models")
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
+    if not os.path.exists('model'):
+        os.makedirs('model')
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

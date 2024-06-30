@@ -1,26 +1,23 @@
 import streamlit as st
 import requests
-import pandas as pd
+from PIL import Image
 
-st.title("Machine Learning API Interaction")
+st.title("Image Classification App")
 
-st.header("Entraîner le modèle")
-uploaded_file = st.file_uploader("Choisissez un fichier CSV pour l'entraînement", type="csv")
+st.write("Upload an image of a dog or a cat to classify it.")
+
+uploaded_file = st.file_uploader("Choose an image...", type="jpg")
+
 if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file)
-    st.write(data)
-    if st.button("Entraîner le modèle"):
-        response = requests.post("http://localhost:8000/training", json={"data": data.iloc[:, :-1].values.tolist(), "target": data.iloc[:, -1].values.tolist()})
-        if response.status_code == 200:
-            st.write(response.json())
-        else:
-            st.error(f"Erreur lors de l'entraînement du modèle: {response.text}")
-
-st.header("Faire une prédiction")
-input_data = st.text_area("Entrez les données pour la prédiction (format JSON)", "[[val1, val2, ...], [val1, val2, ...]]")
-if st.button("Prédire"):
-    response = requests.post("http://localhost:8000/predict", json={"data": eval(input_data)})
-    if response.status_code == 200:
-        st.write(response.json())
-    else:
-        st.error(f"Erreur lors de la prédiction: {response.text}")
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Uploaded Image.', use_column_width=True)
+    
+    if st.button('Predict'):
+        files = {'file': uploaded_file.getvalue()}
+        response = requests.post("http://localhost:8000/predict", files=files)
+        prediction = response.json()
+        st.write(prediction)
+        
+if st.button('Download Model'):
+    with open("model/model.h5", "rb") as file:
+        st.download_button(label="Download Model", data=file, file_name="model.h5")
