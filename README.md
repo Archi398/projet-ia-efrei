@@ -5,8 +5,8 @@ Ce projet utilise FastAPI pour créer une API de classification d'images et Stre
 
 Par
 
-Sabatier Archibald
-Meziane Anis
+Sabatier Archibald /
+Meziane Anis /
 Truong Hubert
 
 ## Prérequis
