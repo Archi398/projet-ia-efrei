@@ -40,7 +40,7 @@ Truong Hubert
    - Sur Windows :
 
      ```bash
-     venv\Scriptsctivate
+     venv\Scripts\activate.bat
      ```
 
 4. Installez les dépendances :
