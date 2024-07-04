@@ -100,6 +100,22 @@ Pour obtenir des informations sur les modèles disponibles, envoyez une requête
 curl -X GET "http://127.0.0.1:8000/model"
 ```
 
+### Obtenir des informations sur le modèle
+
+Pour obtenir des informations sur les modèles disponibles, envoyez une requête GET à l'endpoint `/model` :
+
+```bash
+curl -X GET "http://127.0.0.1:8000/model"
+```
+
+### Obtenir la docs
+
+Pour obtenir des informations sur la docs `/docs` :
+
+```bash
+curl -X GET "http://127.0.0.1:8000/docs"
+```
+
 ### Interagir avec l'application Streamlit
 
 Utilisez l'interface Streamlit pour télécharger des images pour prédiction et télécharger le modèle entraîné. Ouvrez votre navigateur et accédez à `http://localhost:8501`.
